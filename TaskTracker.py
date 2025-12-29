@@ -1,7 +1,7 @@
 import sys 
 
-#initialize list of tasks
-tasks: list = []
+
+
 FILENAME = "tasks.txt"
 
 ## Functions--------------------------------------------------------------
@@ -13,10 +13,13 @@ def to_menu():
 3. Remove task
 4. Exit
 5. Mark task as completed
-6. Edit a task""")
+6. Edit a task
+7. View completed tasks
+8. View incomplete tasks""")
+
+def list_length(tasks):
     
-def list_length(filename):
-    tasks = load_tasks(filename)
+   
     print(f"You have {len(tasks)} task(s) on your list.")
     
 
@@ -26,9 +29,7 @@ def load_tasks(filename):
     loaded_tasks = []
     try:
         with open(filename,'r') as file:
-            # for task in tasks:
-            #     file.read(f"{task["name"]}|{task["done"]}\n")
-            
+        
             for line in file:
                 line = line.strip()
                 if not line:
@@ -42,7 +43,7 @@ def load_tasks(filename):
     except Exception as e:
         print(f"An error occured during loading: {e}")
         return []
-    return tasks
+    return loaded_tasks
     
     
 def write_tasks(filename, tasks):
@@ -63,13 +64,22 @@ def view_tasks(tasks):
             else:
                 print(f"{index}. {item['name']} \u274c")
 
+def valid_number_index(prompt, tasks):
+    choice = input(prompt)
+    if not choice.isdigit():
+        print("Please enter a valid number.")
+        return None
+    index = int(choice) - 1
+    if not (0 <= index < len(tasks)):
+        print("Invalid task number.")
+        return None
+    return index
 
 
 
 ## Greeting message and option menu --------------------------------------
-
-list_length(FILENAME)
-tasks = load_tasks(FILENAME)
+tasks: list = load_tasks(FILENAME)
+list_length(tasks)
 print("What would you like to do? ")
 to_menu()
 
@@ -87,11 +97,11 @@ while True:
     
     if choice == 1:
         new_task = input("Enter task: ")
-        tasks_dict = {
+        task = {
             "name": new_task,
             "done": False
         }
-        tasks.append(tasks_dict)
+        tasks.append(task)
         write_tasks(FILENAME, tasks)
         
         
@@ -103,13 +113,10 @@ while True:
 
 
     elif choice == 3:
-        remove_task = input("Enter the task number you wish to remove: ")
         
-        if not remove_task.isdigit():
-            print("Please enter a valid number.")
+        index = valid_number_index("Enter the task number you wish to remove: ", tasks)
+        if index is None:
             continue
-        
-        index = int(remove_task) - 1
 
         if 0 <= index < len(tasks):
             del tasks[index]
@@ -123,35 +130,32 @@ while True:
         sys.exit()
 
     elif choice == 5:
-        complete_task = input("Enter the task number you wish to complete: ")
-        
-        if not complete_task.isdigit():
-            print("Please enter a valid number.")
+
+        index = valid_number_index("Enter the task number you wish to mark complete: ", tasks)
+        if index is None:
             continue
 
-        index = int(complete_task) - 1
-
-        if 0 <= index < len(tasks):
-            tasks[index]['done'] = True
-            write_tasks(FILENAME, tasks)
-            print("Task completed!")
+        
+        tasks[index]['done'] = True
+        write_tasks(FILENAME, tasks)
+        print("Task completed!")
     elif choice == 6:
-        edit_task = input("Enter the task number you wish to edit: ")
-
-        if not edit_task.isdigit():
-            print("Please enter a valid number.")
-            continue
-
-        index = int(edit_task) - 1
         
-        if 0 <= index < len(tasks):
-            new_name = input("Enter new task name:")
-            tasks[index]['name'] = new_name
-            write_tasks(FILENAME, tasks)
-            print("Task updated!")
-        else:
-            print("Invalid tasks number.")
+        index = valid_number_index("Enter the task number you wish to edit: ", tasks)
+        
+        new_name = input("Enter new task name:")
+        tasks[index]['name'] = new_name
+        write_tasks(FILENAME, tasks)
+        print("Task updated!")
+        
+    elif choice == 7:
+        completed_tasks = [task for task in tasks if task['done']]
+        view_tasks(completed_tasks)
+    elif choice == 8:
+        incomplete_tasks = [task for task in tasks if not task['done']]
+        view_tasks(incomplete_tasks)
 
-    list_length(FILENAME)        
+
+    list_length(tasks)        
     to_menu()
         
