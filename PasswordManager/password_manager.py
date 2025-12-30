@@ -2,7 +2,8 @@ import hashlib
 import sys
 
 
-vault: str = "vault.txt"
+vault: str = "Projects/Python/PasswordManager/vault.txt"
+master: str = "Projects/Python/PasswordManager/master.txt"
 
 
 
@@ -11,9 +12,18 @@ vault: str = "vault.txt"
 def check_master_password(filename: str) -> bool:
     return file_exists(filename)
 
+def ensure_file_exists(filename: str) -> None:
+    try: 
+        with open (filename, "a") as f:
+            pass
+    except Exception as e:
+        print(f"An error occured creating {filename}: {e}")
+
+
 def create_master_password(filename: str) -> None:
     if check_master_password(filename):
-        print("Master password already exits.")
+        print("Master password already exists!")
+        return None     ## Return none here if password exists to prevent if from executing.
     
     password = input("Please enter a new master password: ")
     hashed = hash_password(password)
@@ -52,7 +62,7 @@ def file_exists(filename: str) -> bool:
 def add_password_entry(filename: str) -> None:
     site = input("Please enter the site this password is used for: ")
     username = input("Please enter the associated username: ")
-    password = input("Please enter your password:")
+    password = hash_password(input("Please enter your password:"))
    
 
     entry = f"{site}|{username}|{password}\n"
@@ -80,7 +90,7 @@ def view_vault(filename: str) -> None:
     except FileNotFoundError:
         print("Vault file not found.")
     except Exception as e:
-        print("An error occured: {e}")
+        print(f"An error occured: {e}")
 
 def retrieve_password(filename: str) -> None:
 
@@ -88,6 +98,8 @@ def retrieve_password(filename: str) -> None:
         with open (filename, "r") as f:
                 lines = [line.strip() for line in f if line.strip()]
                 #open file, assign each line read to lines and strip the line.
+                #reads each line --> strips whitespace --> if line has data, or discards empty lines
+                #  --> in f.
 
         if not lines:
             print("The vault is empty")
@@ -101,29 +113,66 @@ def retrieve_password(filename: str) -> None:
         get_passwd = int(get_passwd)
         #convert string number into an integer. 
 
-        if not (1 <= get_passwd < len(lines)):
+        if not (1 <= get_passwd <= len(lines)):
             print("Out of range!")
-        #validate input is in the valid range of indexes
+            return None
+        #validate input is in the valid range of indexes, and return None stops execution.
 
         site, _, password = lines[get_passwd - 1].split("|")
-        #format output and decrement input by 1 to match python indexing.
+        #format output and decrement input by 1 to match python indexing, IE selecting 1 actually is index 0
+        # or the first item.
 
         print(f"Password for {site}: {password}")
-        #print selected index.
+        #print selected index site and password.
       
 
     except FileNotFoundError:
         print("Vault file not found")
     except Exception as e:
-        print("An error occured: {e}")
-#Main----------------------------------------------------------
-create_master_password(vault)
+        print(f"An error occured: {e}")
 
-view_vault(vault)
+def show_menu():
+    print(f"""
+{ADD}. Add password
+{VIEW}. View vault
+{RETRIEVE}. Retrieve password
+{EXIT}. Exit""")
 
-#--------------------------------------------------------------
-if not verify_master_password(vault):
+
+#Menu----------------------------------------------------------
+ADD = 1
+VIEW = 2
+RETRIEVE = 3
+EXIT = 4
+
+#Initialize Master and Vault files-------------------------------------------------
+ensure_file_exists(vault)
+ensure_file_exists(master)
+
+#Authentication-------------------------------------------------------------
+if not check_master_password(master):
+    create_master_password(master)
+
+
+if not verify_master_password(master):
     print("Access is denied!")
     sys.exit()
+#Logic loop----------------------------------------------------
 
+while True: 
+    show_menu()
+    choice = input("Please select the action number you'd like to perform: ")
+    if not choice.isdigit():
+        print("Please enter a valid number!")
+        continue  ## validates that input is indeed a number, and continues to the next loop flow preventing crashing.
+    choice = int(choice)
+    if choice == ADD:
+        add_password_entry(vault)
+    elif choice == VIEW:
+        view_vault(vault)
+    elif choice == RETRIEVE:
+        retrieve_password(vault)
+    elif choice == EXIT:
+        print("Goodbye!")
+        sys.exit()
 
