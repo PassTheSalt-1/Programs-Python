@@ -281,6 +281,81 @@ def edit_entry(filename: str, master_password: str, salt_store: str) -> None:
     except Exception as e:
         print("An error occured: {e}")
 
+def edit_username_by_index(filename: str) -> None: ##index and I/O practice function.
+    try:
+        with open(filename, "r") as f:
+            lines = [line.strip() for line in f if line.strip()]
+            #Create memory object of each line of our vault file
+        if not lines:
+            print("The vault is empty!")
+            return
+            #If no data read, print empty.
+        
+        for index, line in enumerate(lines, 1):
+            site, username, _ = line.split("|")
+            print(f"{index}. {site} {username}")
+            #enumerate our lines variable and print our list with possible options with the
+            #above format for the user.
+        choice = input("What index would you like to edit: ")
+        if not choice.isdigit():
+            print("Please enter a valid number")
+            return
+        #Get input, confirm isdigit()
+        choice = int(choice) - 1 
+        #convert to integer and list index for matching.
+        if not (0 <= choice < len(lines)):
+            print("Out of range!")
+            return
+        #confirm choice is within the range of our list of lines
+        site, _ , encrypted_password_str = lines[choice].split("|")
+        #assigned the selected list index the data associated with that lines index data
+        new_username = input("Please enter a new username: ")
+        lines[choice] = f"{site}|{new_username}|{encrypted_password_str}"
+        #Assign new_username to input and update the associate line with the fstring format.
+
+
+        with open (filename, "w") as f:
+            for line in lines:
+                f.write(line + "\n")
+        print("Username updated successfully!")
+                #Write each line to the vault file with the changes.
+    except FileNotFoundError:
+        print("Vault File not Found!")
+    except Exception as e:
+        print(f"An error occured: {e}")
+
+def delete_entry_by_index(filename: str) -> None:
+    try:
+        with open(filename, "r") as f:
+            lines = [line.strip() for line in f if line.strip()]
+        if not lines:
+            print("Vault is empty!")
+            return
+        for index, line in enumerate(lines, 1):
+            site, username, _ = line.split("|")
+            print(f"{index}. {site} {username}")
+        choice = input("What entry index would you like to delete: ")
+        if not choice.isdigit():
+            print("Please enter a valid number")
+            return
+        choice = int(choice) - 1 ## CONVERT TO LIST INDEX from DISPLAY INDEX
+        if not (0 <= choice < len(lines)):
+            print("Out of range!")
+            return
+        del lines[choice]
+
+        with open (filename, "w") as f:
+            for line in lines:
+                f.write(line + "\n")
+        print("\nEntry deleted successfully!")
+    except FileNotFoundError:
+        print("Vault file not found!")
+    except Exception as e:
+        print(f"An error occured: {e}")
+
+        
+        
+
 ###Indexing rules----------------------------------------------
 # display_index = list_index + 1
 # list_index = display_index - 1
@@ -296,7 +371,9 @@ def show_menu():
 {RETRIEVE}. Retrieve password
 {EXIT}. Exit
 {SEARCH}. Search password by site name
-{EDIT}. Edit existing entry""")
+{EDIT}. Edit existing entry
+{EDIT_I}. Edit by username by index
+{DEL_I}. Delete entry by index""")
 
 ADD = 1
 VIEW = 2
@@ -304,6 +381,8 @@ RETRIEVE = 3
 EXIT = 4
 SEARCH = 5
 EDIT = 6
+EDIT_I = 7
+DEL_I = 8
 
 #Initialize Master and Vault files-------------------------------------------------
 ensure_file_exists(vault)
@@ -343,4 +422,8 @@ while True:
         search_password(vault, master, salt_store)
     elif choice == EDIT:
         edit_entry(vault, master, salt_store)
+    elif choice == EDIT_I:
+        edit_username_by_index(vault)
+    elif choice == DEL_I:
+        delete_entry_by_index(vault)
 
