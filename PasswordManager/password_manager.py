@@ -1,9 +1,16 @@
 import hashlib
 import sys
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
+from cryptography.fernet import Fernet
+import base64
+import os
 
 
 vault: str = "Projects/Python/PasswordManager/vault.txt"
 master: str = "Projects/Python/PasswordManager/master.txt"
+salt_store: str = "Projects/Python/PasswordManager/salt.bin"
 
 
 
@@ -31,9 +38,34 @@ def create_master_password(filename: str) -> None:
     with open (filename, "w") as f:
         f.write(hashed + "\n")
         return None
+    
+def derive_key(master_password: str, salt: bytes) -> bytes:
+    
+    kdf = PBKDF2HMAC(   #Password-Based Key Derivation Function 2 with HMAC
+        algorithm=hashes.SHA256(),
+        length=32,#lenght in bytes or 32 * 8 = 256bits 
+        salt=salt,
+        iterations=100_000,
+        backend=default_backend()
+    )
+    key = kdf.derive(master_password.encode('utf-8'))
+    return base64.urlsafe_b64encode(key)
+
+def get_salt(filename: str) -> bytes:
+    try:
+        with open(filename, "rb") as f:
+            salt = f.read() ##Validate file is not empty FIRST.
+            if salt:
+                return salt ##If it's not, return the salt.
+    except FileNotFoundError:
+        pass
+    salt = os.urandom(16)
+    with open(filename, "wb") as f:
+        f.write(salt)
+        return salt
+
 
 def verify_master_password(filename: str) -> bool:
-
     try:
         with open (filename, "r") as f:
             stored_hash = f.read().strip()
@@ -59,13 +91,20 @@ def file_exists(filename: str) -> bool:
     
 #User Input Functions------------------------------------------
     
-def add_password_entry(filename: str) -> None:
+def add_password_entry(filename: str, master_password:str, salt_store:str) -> None:
+    salt = get_salt(salt_store)
+    key = derive_key(master_password, salt)
+    fernet = Fernet(key)
+    
+    
+    
     site = input("Please enter the site this password is used for: ")
     username = input("Please enter the associated username: ")
     password = hash_password(input("Please enter your password:"))
-   
 
-    entry = f"{site}|{username}|{password}\n"
+    encrypted_password = fernet.encrypt(password.encode())
+
+    entry = f"{site}|{username}|{encrypted_password.decode()}\n"
     try:
         with open (filename, "a") as f:
             f.write(entry)
@@ -92,8 +131,10 @@ def view_vault(filename: str) -> None:
     except Exception as e:
         print(f"An error occured: {e}")
 
-def retrieve_password(filename: str) -> None:
-
+def retrieve_password(filename: str, master_password: str, salt_store: str) -> None:
+    salt = get_salt(salt_store)
+    key = derive_key(master_password, salt)
+    fernet = Fernet(key)
     try:
         with open (filename, "r") as f:
                 lines = [line.strip() for line in f if line.strip()]
@@ -118,37 +159,156 @@ def retrieve_password(filename: str) -> None:
             return None
         #validate input is in the valid range of indexes, and return None stops execution.
 
-        site, _, password = lines[get_passwd - 1].split("|")
+        site, username, encrypted_password_str = lines[get_passwd - 1].split("|")
         #format output and decrement input by 1 to match python indexing, IE selecting 1 actually is index 0
         # or the first item.
+        password = fernet.decrypt(encrypted_password_str.encode()).decode()
+        print(f"Password for {site} {username}: {password}")
+        #print selected index site and password
+    except FileNotFoundError:
+        print("Vault file not found")
+    except Exception as e:
+        print(f"An error occured: {e}")
 
-        print(f"Password for {site}: {password}")
-        #print selected index site and password.
-      
+
+def search_password(filename: str, master_password: str, salt_store: str) -> None:
+    salt = get_salt(salt_store)
+    key = derive_key(master_password, salt)  ## Encrypt, Salt, Key values
+    fernet = Fernet(key)
+    try:
+        with open (filename, "r") as f:
+                lines = [line.strip() for line in f if line.strip()]
+                #open file, assign each line read to lines and strip the line.
+                #reads each line --> strips whitespace --> if line has data, or discards empty lines
+                #  --> in f.
+
+        if not lines:
+            print("The vault is empty")
+
+        search_passwd: str = input("Type the name of the site you'd like the password for: ")
+        #take user input which is a string of the site.
+        if not search_passwd.strip():
+            print("Please enter a valid site name.")
+            #validate we are getting a some kind of input. Leave as normal to be able include .com for example.
+            return
+        matches = [] ## initialize new list to catch matches from first search.
+
+        for index, line in enumerate(lines, 1):
+            site, username, encrypted_password_str = line.split("|")
+            if search_passwd.lower() in site.lower(): #Normalize input and site from file.
+                matches.append((index, site,username, encrypted_password_str)) ## add any matches to the new list.
+        if not matches: 
+            print("No Matches found")
+            return
+        for i, site, username, _ in matches: # For each match, print the index, site and username.
+            print(f"{i}. {site} {username}")
+
+        choice = input("Select the number of the password to retrieve: ")
+        if not choice.isdigit():
+            print("Invalid number")
+            return
+        choice = int(choice) ## continue with our normal index selection of the matching results.
+
+        selected = next((m for m in matches if m[0]== choice), None)
+        if not selected:
+            print("Choice out of range")
+            return
+        _, site, username, encrypted_password_str = selected
+        password = fernet.decrypt(encrypted_password_str.encode()).decode()
+        print(f"Password for {site} {username}: {password}")
 
     except FileNotFoundError:
         print("Vault file not found")
     except Exception as e:
         print(f"An error occured: {e}")
 
+def edit_entry(filename: str, master_password: str, salt_store: str) -> None:
+    salt = get_salt(salt_store)
+    key = derive_key(master_password, salt)  ## Encrypt, Salt, Key values
+    fernet = Fernet(key)
+    try:
+        with open (filename, "r") as f:
+                lines = [line.strip() for line in f if line.strip()]
+                #open file, assign each line read to lines and strip the line.
+                #reads each line --> strips whitespace --> if line has data, or discards empty lines
+                #  --> in f.
+
+        if not lines:
+            print("The vault is empty")
+
+        search_passwd: str = input("Type the name of the site you'd like to update: ")
+        #take user input which is a string of the site.
+        if not search_passwd.strip():
+            print("Please enter a valid site name.")
+            #validate we are getting a some kind of input. Leave as normal to be able include .com for example.
+            return
+        matches = [] ## initialize new list to catch matches from first search.
+
+        for index, line in enumerate(lines, 1):
+            site, username, encrypted_password_str = line.split("|")
+            if search_passwd.lower() in site.lower(): #Normalize input and site from file.
+                matches.append((index, site,username, encrypted_password_str)) ## add any matches to the new list.
+        if not matches: 
+            print("No Matches found")
+            return
+        for i, site, username, _ in matches: # For each match, print the index, site and username.
+            print(f"{i}. {site} {username}")
+
+        choice = input("Select the number of the site you'd like to update: ")
+        if not choice.isdigit():
+            print("Invalid number")
+            return
+        choice = int(choice) ## continue with our normal index selection of the matching results.
+
+        selected = next((m for m in matches if m[0]== choice), None)
+        if not selected:
+            print("Choice out of range")
+            return
+        new_username = input("Enter new username: ")
+
+        index, site, _, encrypted_password_str = selected 
+        ### _ represents a place holder for the oldusername variable,
+        # it is written like this to show it's not needed, will be discarded for the new_username.
+        lines_index = index - 1
+        lines[lines_index] = f"{site}|{new_username}|{encrypted_password_str}" ## replaces line at line_index with fstring.
+
+        with open(filename,"w") as f:
+            for line in lines:
+                f.write(line + "\n") ## Overwrites the file with new changes.
+
+    except FileNotFoundError:
+        print("Vaulet file not found")
+    except Exception as e:
+        print("An error occured: {e}")
+
+###Indexing rules----------------------------------------------
+# display_index = list_index + 1
+# list_index = display_index - 1
+
+
+
+
+#Menu----------------------------------------------------------
 def show_menu():
     print(f"""
 {ADD}. Add password
 {VIEW}. View vault
 {RETRIEVE}. Retrieve password
-{EXIT}. Exit""")
+{EXIT}. Exit
+{SEARCH}. Search password by site name
+{EDIT}. Edit existing entry""")
 
-
-#Menu----------------------------------------------------------
 ADD = 1
 VIEW = 2
 RETRIEVE = 3
 EXIT = 4
+SEARCH = 5
+EDIT = 6
 
 #Initialize Master and Vault files-------------------------------------------------
 ensure_file_exists(vault)
 ensure_file_exists(master)
-
+ensure_file_exists(salt_store)
 #Authentication-------------------------------------------------------------
 if not check_master_password(master):
     create_master_password(master)
@@ -157,7 +317,11 @@ if not check_master_password(master):
 if not verify_master_password(master):
     print("Access is denied!")
     sys.exit()
+
+#Encrypt & Decrypt-------------------------------------------------------------
+
 #Logic loop----------------------------------------------------
+
 
 while True: 
     show_menu()
@@ -167,12 +331,16 @@ while True:
         continue  ## validates that input is indeed a number, and continues to the next loop flow preventing crashing.
     choice = int(choice)
     if choice == ADD:
-        add_password_entry(vault)
+        add_password_entry(vault, master, salt_store)
     elif choice == VIEW:
         view_vault(vault)
     elif choice == RETRIEVE:
-        retrieve_password(vault)
+        retrieve_password(vault, master, salt_store)
     elif choice == EXIT:
         print("Goodbye!")
         sys.exit()
+    elif choice == SEARCH:
+        search_password(vault, master, salt_store)
+    elif choice == EDIT:
+        edit_entry(vault, master, salt_store)
 
