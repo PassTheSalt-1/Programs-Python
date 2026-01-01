@@ -7,11 +7,14 @@ from cryptography.fernet import Fernet
 import base64
 import os
 from getpass import getpass
+import time
 
 
 vault: str = "Projects/Python/PasswordManager/vault.txt"
 master: str = "Projects/Python/PasswordManager/master.txt"
 salt_store: str = "Projects/Python/PasswordManager/salt.bin"
+
+inactivity_timeout = 300 #seconds = 5mins
 
 
 
@@ -124,22 +127,40 @@ def add_password_entry(filename: str, fernet: Fernet) -> None:
 
 def view_vault(filename: str) -> None:
     try:
-        with open (filename, "r") as f:   ### Open file in read mode
-            lines = f.readlines()       ## assign variable to our lines read for indexing
+        entries = load_vault_entries(filename)
 
-        if not lines:
-            print("The vault is empty")  ## if file is empty, print error
-
-        for index, line in enumerate(lines, 1):### enumerate the file if data is found.
-            line = line.strip()
-            if not line:                
-                continue                ### skip if line is empty, in this case the password.
-            site, username, _ = line.split("|") ## format output with | separator.
+        if not entries:
+            print("The Vault is empty")
+            return
+        for index, site, username, _ in entries:
             print(f"{index}. {site:<15} {username}")    
     except FileNotFoundError:
         print("Vault file not found.")
     except Exception as e:
         print(f"An error occured: {e}")
+
+def load_vault_entries(filename:str) -> list[tuple]:  ## Helper function
+    entries = []
+
+    try:
+        with open (filename, "r") as f:
+            for index, line in enumerate(f, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                
+                parts = line.split("|") #split line into list, which should contain 3 values.
+                if len(parts) != 3:
+                    print(f"Skipping bad entry on line {index}")
+                    continue
+                site, username, encrypted_password = parts
+                entries.append(( site, username, encrypted_password)) #append index from enumerate to entries list
+    except FileNotFoundError:
+        print("Vault file not found")
+    except Exception:
+        print("An error has occured")
+    return entries
+
 
 def retrieve_password(filename: str, fernet: Fernet) -> None:
     
@@ -331,36 +352,47 @@ def edit_username_by_index(filename: str) -> None: ##index and I/O practice func
         print(f"An error occured: {e}")
 
 def delete_entry_by_index(filename: str) -> None:
-    try:
-        with open(filename, "r") as f:
-            lines = [line.strip() for line in f if line.strip()]
-        if not lines:
-            print("Vault is empty!")
-            return
-        for index, line in enumerate(lines, 1):
-            site, username, _ = line.split("|")
-            print(f"{index}. {site} {username}")
-        choice = input("What entry index would you like to delete: ")
-        if not choice.isdigit():
-            print("Please enter a valid number")
-            return
-        choice = int(choice) - 1 ## CONVERT TO LIST INDEX from DISPLAY INDEX
-        if not (0 <= choice < len(lines)):
-            print("Out of range!")
-            return
-        del lines[choice]
+    
+    index = select_entry(filename)
+    if index is None:
+        return  
+   
+    
+    entries = load_vault_entries(filename)
+    del entries[index]
 
+    try:
         with open (filename, "w") as f:
-            for line in lines:
-                f.write(line + "\n")
+            for site, username, encrypted_password in entries:
+                f.write(f"{site}|{username}|{encrypted_password}\n")
         print("\nEntry deleted successfully!")
     except FileNotFoundError:
         print("Vault file not found!")
     except Exception as e:
         print(f"An error occured: {e}")
 
-        
-        
+def check_inactivity(last_activity: float) -> None:
+    if time.time() - last_activity > inactivity_timeout:
+        print("\nSession timed out due to inactivity.")
+        sys.exit()        
+
+def select_entry(filename:str) -> None:
+    entries = load_vault_entries(filename)
+    if not entries: 
+        print("The vault is empty.")
+    for idx, entry in enumerate(entries, 1):
+        site, username, _ = entry
+        print(f"{idx}. {site} {username}")
+
+    choice = input("What entry index would you like to edit: ")
+    if not choice.isdigit():
+        print("Please enter a valid number")
+        return
+    choice = int(choice) - 1 ## CONVERT TO LIST INDEX from DISPLAY INDEX
+    if not (0 <= choice < len(entries)):
+        print("Out of range!")
+        return
+    return choice
 
 ###Indexing rules----------------------------------------------
 # display_index = list_index + 1
@@ -410,12 +442,19 @@ key = derive_key(password, salt)
 fernet = Fernet(key)
 
 
+
+#Inactivity Timeout--------------------------------------------
+last_activity = time.time()
+
 #Logic loop----------------------------------------------------
 
-
 while True: 
+    check_inactivity(last_activity)
     show_menu()
     choice = input("Please select the action number you'd like to perform: ")
+    check_inactivity(last_activity)
+    last_activity = time.time()
+
     if not choice.isdigit():
         print("Please enter a valid number!")
         continue  ## validates that input is indeed a number, and continues to the next loop flow preventing crashing.
@@ -437,4 +476,4 @@ while True:
         edit_username_by_index(vault)
     elif choice == DEL_I:
         delete_entry_by_index(vault)
-
+    last_activity = time.time()
