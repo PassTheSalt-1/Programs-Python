@@ -6,6 +6,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.fernet import Fernet
 import base64
 import os
+from getpass import getpass
 
 
 vault: str = "Projects/Python/PasswordManager/vault.txt"
@@ -32,7 +33,16 @@ def create_master_password(filename: str) -> None:
         print("Master password already exists!")
         return None     ## Return none here if password exists to prevent if from executing.
     
-    password = input("Please enter a new master password: ")
+    while True:
+        password = getpass("Please enter a new master password: ")
+        confirm = getpass("Please confirm the master password: ")
+
+        #add loop to check for matching master passwords.
+        if confirm != password:
+            print("Passwords do not match.\n")
+            continue          
+        break
+
     hashed = hash_password(password)
     
     with open (filename, "w") as f:
@@ -65,13 +75,12 @@ def get_salt(filename: str) -> bytes:
         return salt
 
 
-def verify_master_password(filename: str) -> bool:
+def verify_master_password(filename: str, password: str) -> bool:
     try:
         with open (filename, "r") as f:
             stored_hash = f.read().strip()
-        password = input("Please enter the master password:")
-        hashed = hash_password(password)
-        return hashed == stored_hash
+        password = hash_password(password)
+        return  password == stored_hash
     except FileNotFoundError:
         return False
 
@@ -91,16 +100,17 @@ def file_exists(filename: str) -> bool:
     
 #User Input Functions------------------------------------------
     
-def add_password_entry(filename: str, master_password:str, salt_store:str) -> None:
-    salt = get_salt(salt_store)
-    key = derive_key(master_password, salt)
-    fernet = Fernet(key)
-    
-    
-    
+def add_password_entry(filename: str, fernet: Fernet) -> None:
+   
+ 
     site = input("Please enter the site this password is used for: ")
     username = input("Please enter the associated username: ")
-    password = hash_password(input("Please enter your password:"))
+    password = getpass("Please enter your password:")
+    confirm = getpass("Please confirm your password: ")
+
+    if password != confirm:
+        print("Passwords do not match")
+        return
 
     encrypted_password = fernet.encrypt(password.encode())
 
@@ -131,10 +141,9 @@ def view_vault(filename: str) -> None:
     except Exception as e:
         print(f"An error occured: {e}")
 
-def retrieve_password(filename: str, master_password: str, salt_store: str) -> None:
-    salt = get_salt(salt_store)
-    key = derive_key(master_password, salt)
-    fernet = Fernet(key)
+def retrieve_password(filename: str, fernet: Fernet) -> None:
+    
+  
     try:
         with open (filename, "r") as f:
                 lines = [line.strip() for line in f if line.strip()]
@@ -171,10 +180,8 @@ def retrieve_password(filename: str, master_password: str, salt_store: str) -> N
         print(f"An error occured: {e}")
 
 
-def search_password(filename: str, master_password: str, salt_store: str) -> None:
-    salt = get_salt(salt_store)
-    key = derive_key(master_password, salt)  ## Encrypt, Salt, Key values
-    fernet = Fernet(key)
+def search_password(filename: str, fernet: Fernet) -> None:
+
     try:
         with open (filename, "r") as f:
                 lines = [line.strip() for line in f if line.strip()]
@@ -222,10 +229,9 @@ def search_password(filename: str, master_password: str, salt_store: str) -> Non
     except Exception as e:
         print(f"An error occured: {e}")
 
-def edit_entry(filename: str, master_password: str, salt_store: str) -> None:
-    salt = get_salt(salt_store)
-    key = derive_key(master_password, salt)  ## Encrypt, Salt, Key values
-    fernet = Fernet(key)
+def edit_entry(filename: str, fernet: Fernet) -> None:
+      ## Encrypt, Salt, Key values
+    
     try:
         with open (filename, "r") as f:
                 lines = [line.strip() for line in f if line.strip()]
@@ -277,7 +283,7 @@ def edit_entry(filename: str, master_password: str, salt_store: str) -> None:
                 f.write(line + "\n") ## Overwrites the file with new changes.
 
     except FileNotFoundError:
-        print("Vaulet file not found")
+        print("Vault file not found")
     except Exception as e:
         print("An error occured: {e}")
 
@@ -391,13 +397,18 @@ ensure_file_exists(salt_store)
 #Authentication-------------------------------------------------------------
 if not check_master_password(master):
     create_master_password(master)
-
-
-if not verify_master_password(master):
+password = getpass("Please enter the master password: ")
+if not verify_master_password(master, password):
     print("Access is denied!")
     sys.exit()
 
 #Encrypt & Decrypt-------------------------------------------------------------
+## Derive Key
+
+salt = get_salt(salt_store)
+key = derive_key(password, salt)
+fernet = Fernet(key)
+
 
 #Logic loop----------------------------------------------------
 
@@ -410,18 +421,18 @@ while True:
         continue  ## validates that input is indeed a number, and continues to the next loop flow preventing crashing.
     choice = int(choice)
     if choice == ADD:
-        add_password_entry(vault, master, salt_store)
+        add_password_entry(vault, fernet)
     elif choice == VIEW:
         view_vault(vault)
     elif choice == RETRIEVE:
-        retrieve_password(vault, master, salt_store)
+        retrieve_password(vault, fernet)
     elif choice == EXIT:
         print("Goodbye!")
         sys.exit()
     elif choice == SEARCH:
-        search_password(vault, master, salt_store)
+        search_password(vault, fernet)
     elif choice == EDIT:
-        edit_entry(vault, master, salt_store)
+        edit_entry(vault, fernet)
     elif choice == EDIT_I:
         edit_username_by_index(vault)
     elif choice == DEL_I:
